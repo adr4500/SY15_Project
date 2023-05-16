@@ -1,0 +1,50 @@
+Tache 2.7.1 :
+
+    Modele de prédiction du TurtleBot :
+        - Etat du système : (Vitesse de chacune des roues), Position et Orientation du robot, Vitesses du robot (angulaire et linéaires)
+    
+    Les vitesses longitudinales et angulaires doivent être présentes dans le vecteur d'état afin de pouvoir estimer la position suivante.
+    
+    On considère la derivée 2nd de la position nulle (l'acceleration) afin d'obtenir la prédiction.
+    
+        ┌     ┐
+        │ x   │
+        │ y   │
+        │ θ   │
+    X = │ Vl  │
+        │ w   │
+        └     ┘
+
+Vecteur d'observation : 
+
+        ┌     ┐
+        │ Vl  │
+    Z = │ w   │
+        └     ┘
+
+
+    x(k+1) = x(k) + cos(θ(k))*Te*Vl
+    y(k+1) = y(k) + sin(θ(k))*Te*Vl
+    θ(k+1) = θ(k) + Te*w
+
+             ┌                           ┐
+             │ 1  0  0  cos(θ(k))*Te  0  │
+             │ 0  1  0  sin(θ(k))*Te  0  │
+             │ θ  0  1        0       Te │
+    X(k+1) = │ 0  0  0        1       0  │ * X(k)
+             │ 0  0  0        0       1  │
+             └                           ┘
+        ┌                                      ┐
+        │ 1  0  -sin(θ)*w*Te*Vl  cos(θ)*Te  0  │
+        │ 0  1   cos(θ)*w*Te*Vl  sin(θ)*Te  0  │
+    F = │ 0  0          1            0      Te │
+        │ 0  0          0            0      0  │
+        │ 0  0          0            0      0  │
+        └                                      ┘
+         ┌                ┐
+    C =  │ 0  0  0  1  0  │ 
+         │ 0  0  0  0  1  │
+         └                ┘ 
+
+
+    
