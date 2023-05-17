@@ -19,13 +19,51 @@ class StateEstimation:
         self.command_subscriber = rospy.Subscriber("/cmd_vel", Twist, self.receive_input)
         self.odom_subscriber = rospy.Subscriber("/odom", Odometry, self.receive_odom)
         self.imu_subscriber = rospy.Subscriber("/imu", Imu, self.receive_imu)
+
+        # Matrices
+        self.P = np.eye(5) * 0.1 # Matrice de covariance de l'état
+        self.X = np.zeros((5,1)) # Vecteur d'état
+        self.F = np.zeros((5,5)) # Matrice de transition d'état
+        self.C = np.zeros((2,5)) # Matrice de transition de mesure
+        self.Q = np.zeros((5,5)) # Matrice de covariance du bruit de processus
+        self.R = np.zeros((2,2)) # Matrice de covariance du bruit de mesure
+
+        # Initialisation des matrices
+        self.C[0,3] = 1
+        self.C[1,4] = 1
+        self.F[0,0] = 1
+        self.F[1,1] = 1
+        self.F[2,2] = 1
+
+        self.K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.R) # Matrice de gain de Kalman
+
+        self.last_time = 0
         
         
     def receive_input(self, twist_msg:Twist):
         linear_velocity = twist_msg.linear.x
         angular_velocity = twist_msg.angular.z
+
+        new_time = rospy.get_time()
+
+        # Calcul de la matrice F
+        self.F[0,2] = -linear_velocity * math.sin(self.X[2]) * (new_time - self.last_time) * angular_velocity
+        self.F[0,3] = math.cos(self.X[2]) * (new_time - self.last_time)
+        self.F[1,2] = linear_velocity * math.cos(self.X[2]) * (new_time - self.last_time) * angular_velocity
+        self.F[1,3] = math.sin(self.X[2]) * (new_time - self.last_time)
+        self.F[2,4] = (new_time - self.last_time)
+
+        # Mise a jour du vecteur d'état
+        self.X[0] = self.X[0] + linear_velocity * math.cos(self.X[2]) * (new_time - self.last_time)
+        self.X[1] = self.X[1] + linear_velocity * math.sin(self.X[2]) * (new_time - self.last_time)
+        self.X[2] = self.X[2] + angular_velocity * (new_time - self.last_time)
+        self.X[3] = linear_velocity
+        self.X[4] = angular_velocity
+
+        self.last_time = new_time
         
-        # ÉTAPE DE PRÉDICTION
+        # Calcul de la matrice P
+        self.P = self.F @ self.P @ self.F.T + self.Q
         
         self.publish_estimate()
         
@@ -34,7 +72,9 @@ class StateEstimation:
         linear_velocity = odom_msg.twist.twist.linear.x
         angular_velocity = odom_msg.twist.twist.angular.z
         
-        # ÉTAPE DE CORRECTION
+        self.X = self.X + self.K @ (np.array([[linear_velocity], [angular_velocity]]) - self.C @ self.X)
+        self.P = (np.eye(5) - self.K @ self.C) @ self.P
+        self.K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.R)
         
 
         
@@ -42,18 +82,18 @@ class StateEstimation:
         linear_acceleration = imu_msg.linear_acceleration # Attention, contient .x .y et .z
         angular_velocity = imu_msg.angular_velocity.z
         
-        # ÉTAPE DE CORRECTION
+        # Non utilisé
         
         
     
     # À adapter
     def publish_estimate(self):
         
-        x = 0
-        y = 0
-        theta = 0
+        x = self.X[0]
+        y = self.X[1]
+        theta = self.X[2]
         
-        covariance = np.zeros((3,3)) # Il ne faut que la partie de la covariance concernant x, y et theta
+        covariance = self.P[0:3,0:3]
         
         msg = PoseWithCovarianceStamped()
         msg.header.stamp = rospy.Time.now()
