@@ -15,8 +15,9 @@ class StateEstimation:
         rospy.loginfo("Démarrage du nœud d'estimation d'état")
         
         self.estimate_publisher = rospy.Publisher("estimation", PoseWithCovarianceStamped, queue_size=1)
+
+        self.timer = rospy.Timer(rospy.Duration(0.1), self.predict)
         
-        self.command_subscriber = rospy.Subscriber("/cmd_vel", Twist, self.receive_input)
         self.odom_subscriber = rospy.Subscriber("/odom", Odometry, self.receive_odom)
         self.imu_subscriber = rospy.Subscriber("/imu", Imu, self.receive_imu)
 
@@ -40,25 +41,21 @@ class StateEstimation:
         self.last_time = 0
         
         
-    def receive_input(self, twist_msg:Twist):
-        linear_velocity = twist_msg.linear.x
-        angular_velocity = twist_msg.angular.z
+    def predict(self):
 
-        new_time = rospy.get_time()
+        new_time = rospy.Time.now().to_sec()
 
         # Calcul de la matrice F
-        self.F[0,2] = -linear_velocity * math.sin(self.X[2]) * (new_time - self.last_time) * angular_velocity
+        self.F[0,2] = -self.X[3] * math.sin(self.X[2]) * (new_time - self.last_time) * self.X[4]
         self.F[0,3] = math.cos(self.X[2]) * (new_time - self.last_time)
-        self.F[1,2] = linear_velocity * math.cos(self.X[2]) * (new_time - self.last_time) * angular_velocity
+        self.F[1,2] = self.X[3] * math.cos(self.X[2]) * (new_time - self.last_time) * self.X[4]
         self.F[1,3] = math.sin(self.X[2]) * (new_time - self.last_time)
         self.F[2,4] = (new_time - self.last_time)
 
         # Mise a jour du vecteur d'état
-        self.X[0] = self.X[0] + linear_velocity * math.cos(self.X[2]) * (new_time - self.last_time)
-        self.X[1] = self.X[1] + linear_velocity * math.sin(self.X[2]) * (new_time - self.last_time)
-        self.X[2] = self.X[2] + angular_velocity * (new_time - self.last_time)
-        self.X[3] = linear_velocity
-        self.X[4] = angular_velocity
+        self.X[0] = self.X[0] + self.X[3] * math.cos(self.X[2]) * (new_time - self.last_time)
+        self.X[1] = self.X[1] + self.X[3] * math.sin(self.X[2]) * (new_time - self.last_time)
+        self.X[2] = self.X[2] + self.X[4] * (new_time - self.last_time)
 
         self.last_time = new_time
         
