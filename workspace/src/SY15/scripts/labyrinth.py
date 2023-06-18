@@ -1,16 +1,13 @@
+#!/usr/bin/env python3
+
 import numpy as np
 import rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Pose, PoseWithCovarianceStamped, Quaternion, Point
 from visualization_msgs.msg import MarkerArray, Marker
-
-SIZE = 20 # Size of the labyrinth
+from enum import Enum
 
 # Enum of directions
-class Direction:
-    UP = 0
-    RIGHT = 1
-    DOWN = 2
-    LEFT = 3
+Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
 
 class Tile :
     '''This class represents one cell of the labyrinth, the labyrinth is defined recursively as a Tile tree'''
@@ -65,24 +62,24 @@ class Labyrinth_Solver:
     '''Ros node used to map and solve'''
     def __init__(self):
         rospy.init_node('lab_solver')
-        self.lidar_subscriber = rospy.Subscriber('/poly_cartesien',MarkerArray,self.lidar_callback)
-        self.target_publisher = rospy.Publisher('/target',PoseStamped,queue_size=10)
-        self.pos_subscriber = rospy.Subscriber('/...',PoseStamped,self.pos_callback)
-
+        
         self.first_tile = None
         self.current_tile = None
 
         self.robot_pos = None
 
         self.moving = False
+        
+        self.lidar_subscriber = rospy.Subscriber('/lidar/polylines',MarkerArray,self.lidar_callback)
+        self.target_publisher = rospy.Publisher('/target',Pose,queue_size=10)
+        self.pos_subscriber = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pos_callback)
 
         rospy.spin()
     
     def lidar_callback(self,data):
         '''Callback function for the lidar'''
-
         # If the robot is moving, wait for it to stop
-        if self.moving :
+        if self.moving or not self.robot_pos:
             return
         
         # Initialization of the first tile
@@ -90,45 +87,52 @@ class Labyrinth_Solver:
             self.first_tile = Tile()
             # Detect entrance : two alligned segments with a gap between them
             if len(data.markers) != 2 :
+                print("WARNING : {} Markers detected")
                 raise ValueError("The labyrinth entrance is not detected")
             else :
                 # Take the closest point to the robot of each segment
                 first_segment = [data.markers[0].points[0],data.markers[0].points[-1]]
                 second_segment = [data.markers[1].points[0],data.markers[1].points[-1]]
-                first_segment_distances = [np.linalg.norm(np.array(self.robot_pos.pose.position)-np.array(point)) for point in first_segment]
-                second_segment_distances = [np.linalg.norm(np.array(self.robot_pos.pose.position)-np.array(point)) for point in second_segment]
+                first_segment_distances = [np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point.x,point.y])) for point in first_segment]
+                second_segment_distances = [np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point.x,point.y])) for point in second_segment]
 
                 entrance_points = []
                 if first_segment_distances[0] < first_segment_distances[1] :
-                    entrance_points.append(first_segment[0])
+                    entrance_points.append(np.array([first_segment[0].x,first_segment[0].y]))
                 else :
-                    entrance_points.append(first_segment[1])
+                    entrance_points.append(np.array([first_segment[1].x,first_segment[1].y]))
 
                 if second_segment_distances[0] < second_segment_distances[1] :
-                    entrance_points.append(second_segment[0])
+                    entrance_points.append(np.array([second_segment[0].x,second_segment[0].y]))
                 else :
-                    entrance_points.append(second_segment[1])
+                    entrance_points.append(np.array([second_segment[1].x,second_segment[1].y]))
                 
                 # Sort entrance points by x coordinate
-                entrance_points.sort(key=lambda point: point.x)
+                entrance_points.sort(key=lambda point: point[1])
 
                 # Set the corners of the first tile
-                self.first_tile.set_corner(2,[entrance_points[0].x,entrance_points[0].y])
-                self.first_tile.set_corner(3,[entrance_points[1].x,entrance_points[1].y])
+                self.first_tile.set_corner(2,[entrance_points[0][0],entrance_points[0][1]])
+                self.first_tile.set_corner(3,[entrance_points[1][0],entrance_points[1][1]])
                 self.first_tile.parent_direction = Direction.DOWN
 
                 # Go to entrance
-                self.target_publisher.publish(np.mean(entrance_points,axis=0))
+                target_coord = np.mean(entrance_points,axis=0)
+                target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
+                print(target)
+                self.target_publisher.publish(target)
                 self.current_tile = self.first_tile
                 self.moving = True
                 return
         
         else :
             # Map the tile the robot just entered
+            pass
             
         
 
 
     def pos_callback(self,data):
         '''Callback function for the robot position'''
-        self.robot_pos = data
+        self.robot_pos = data.pose
+if __name__ == "__main__":
+    node=Labyrinth_Solver()
