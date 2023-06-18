@@ -20,7 +20,7 @@ def callback(msg):
 
     for i, theta in enumerate(np.arange(msg.angle_min, msg.angle_max, msg.angle_increment)):
         r=msg.ranges[i]
-        if(r>0.1) and (rangemin<r<rangemax) :
+        if(0.1<r<0.5) and (rangemin<r<rangemax) :
             coords.append((r*np.cos(theta),r*np.sin(theta)))
     # Create a PointCloud2 message from coordinates
     pc2 = create_cloud(msg.header, PC2FIELDS, [[x,y,0,0] for x,y in coords])
