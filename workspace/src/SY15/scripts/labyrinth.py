@@ -180,14 +180,15 @@ class Labyrinth_Solver:
                 # Bring the robot to the center of the tile
                 direction = self.current_tile.parent_direction
                 distance = self.tile_size/2
+                pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
                 if direction == Direction.UP :
-                    target_coord = self.robot_pos + np.array([0,distance])
+                    target_coord = pos + np.array([0,distance])
                 elif direction == Direction.RIGHT :
-                    target_coord = self.robot_pos + np.array([distance,0])
+                    target_coord = pos + np.array([distance,0])
                 elif direction == Direction.DOWN :
-                    target_coord = self.robot_pos + np.array([0,-distance])
+                    target_coord = pos + np.array([0,-distance])
                 elif direction == Direction.LEFT :
-                    target_coord = self.robot_pos + np.array([-distance,0])
+                    target_coord = pos + np.array([-distance,0])
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
                 self.state = State.MOVING_TO_CENTER
@@ -281,6 +282,6 @@ class Labyrinth_Solver:
 
     def pos_callback(self,data):
         '''Callback function for the robot position'''
-        self.robot_pos = np.array([data.pose.pose.position.x,data.pose.pose.position.y])
+        self.robot_pos = data.pose
 if __name__ == "__main__":
     node=Labyrinth_Solver()
