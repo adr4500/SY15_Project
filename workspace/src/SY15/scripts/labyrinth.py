@@ -231,7 +231,7 @@ class Labyrinth_Solver:
                 
                 # Sort points by distance to the robot
                 for quadrant in quadrants :
-                    quadrant.sort(key=lambda point: np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point.x,point.y])))
+                    quadrant.sort(key=lambda point: np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point[0],point[1]])))
                 
                 # Get the closest point in each quadrant
                 closest_points = []
