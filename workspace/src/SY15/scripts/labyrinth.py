@@ -38,10 +38,10 @@ class Tile :
 
     def create_child(self,direction):
         '''Creates a child cell in the given direction'''
-        if self.children[direction] is not None :
+        if self.children[direction.value] is not None :
             raise ValueError("The child cell already exists")
         else :
-            self.children[direction] = Tile(self)
+            self.children[direction.value] = Tile(self)
 
             # Connect the tiles
             if direction == Direction.UP :
@@ -220,13 +220,13 @@ class Labyrinth_Solver:
                                 quadrants[2].append(point)
                                 points_in_quad[2] = True
                     if points_in_quad[0] and points_in_quad[1] :
-                        walls[Direction.UP] = True
+                        walls[Direction.UP.value] = True
                     if points_in_quad[1] and points_in_quad[3] :
-                        walls[Direction.RIGHT] = True
+                        walls[Direction.RIGHT.value] = True
                     if points_in_quad[2] and points_in_quad[3] :
-                        walls[Direction.DOWN] = True
+                        walls[Direction.DOWN.value] = True
                     if points_in_quad[0] and points_in_quad[2] :
-                        walls[Direction.LEFT] = True
+                        walls[Direction.LEFT.value] = True
 
                 
                 # Sort points by distance to the robot
@@ -252,7 +252,7 @@ class Labyrinth_Solver:
                 # If all corners are defined, create the children
                 if None not in self.current_tile.get_corners() :
                     for direction in Direction :
-                        if not walls[direction]:
+                        if not walls[direction.value]:
                             self.current_tile.create_child(direction)
                 
                 # Decide to move :
