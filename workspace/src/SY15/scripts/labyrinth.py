@@ -241,7 +241,7 @@ class Labyrinth_Solver:
                 
                 # Delete points that are too far
                 for i in range(len(closest_points)):
-                    if np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i].x,closest_points[i].y])) > self.tile_size/2 :
+                    if np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size/2 :
                         closest_points[i] = None
                 
                 # Update the corners of the current tile
