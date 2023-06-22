@@ -65,16 +65,20 @@ class Tile :
         # If two diagonal corners are defined, extrapolate orthogonaly the two others
         if self.corners[0] is not None and self.corners[3] is not None :
             if self.corners[1] is None :
+                self.corners[1] = np.array([[],[]])
                 self.corners[1][0] = self.corners[0][0]
                 self.corners[1][1] = self.corners[3][1]
             if self.corners[2] is None :
+                self.corners[2] = np.array([[],[]])
                 self.corners[2][0] = self.corners[3][0]
                 self.corners[2][1] = self.corners[0][1]
         elif self.corners[1] is not None and self.corners[2] is not None :
             if self.corners[0] is None :
+                self.corners[0] = np.array([[],[]])
                 self.corners[0][0] = self.corners[1][0]
                 self.corners[0][1] = self.corners[2][1]
             if self.corners[3] is None :
+                self.corners[3] = np.array([[],[]])
                 self.corners[3][0] = self.corners[2][0]
                 self.corners[3][1] = self.corners[1][1]
     
@@ -121,6 +125,7 @@ class Labyrinth_Solver:
                 self.state = State.WAITING
             elif self.state == State.MOVING_TO_CENTER :
                 self.state = State.MAPPING
+        print("STATE : {}".format(self.state))
 
     
     def lidar_callback(self,data):
