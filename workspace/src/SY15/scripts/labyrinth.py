@@ -236,7 +236,8 @@ class Labyrinth_Solver:
                 # Get the closest point in each quadrant
                 closest_points = []
                 for quadrant in quadrants :
-                    closest_points.append(quadrant[0])
+                    if quadrant != [] :
+                        closest_points.append(quadrant[0])
                 
                 # Delete points that are too far
                 for i in range(len(closest_points)):
