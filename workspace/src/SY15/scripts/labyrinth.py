@@ -281,6 +281,6 @@ class Labyrinth_Solver:
 
     def pos_callback(self,data):
         '''Callback function for the robot position'''
-        self.robot_pos = data.pose
+        self.robot_pos = np.array([data.pose.pose.position.x,data.pose.pose.position.y])
 if __name__ == "__main__":
     node=Labyrinth_Solver()
