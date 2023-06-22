@@ -5,6 +5,7 @@ import rospy
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped, Quaternion, Point
 from visualization_msgs.msg import MarkerArray, Marker
 from enum import Enum
+from std_msgs.msg import Bool
 
 # Enum of directions
 Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
@@ -108,8 +109,19 @@ class Labyrinth_Solver:
         self.lidar_subscriber = rospy.Subscriber('/lidar/polylines',MarkerArray,self.lidar_callback)
         self.target_publisher = rospy.Publisher('/target',Pose,queue_size=10)
         self.pos_subscriber = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pos_callback)
+        self.state_subscription = rospy.Subscriber("/state_check",Bool,self.state_callback)
 
         rospy.spin()
+    
+    def state_callback(self,data):
+        '''Callback function for the state'''
+        if not data.data :
+            # Next State
+            if self.state == State.MOVING_TO_EDGE :
+                self.state = State.WAITING
+            elif self.state == State.MOVING_TO_CENTER :
+                self.state = State.MAPPING
+
     
     def lidar_callback(self,data):
         '''Callback function for the lidar'''
