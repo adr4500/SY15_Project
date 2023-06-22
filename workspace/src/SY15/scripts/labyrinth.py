@@ -205,15 +205,15 @@ class Labyrinth_Solver:
                         # Rotate point
                         point = np.dot(np.array([[np.cos(self.robot_pos.pose.orientation.z),-np.sin(self.robot_pos.pose.orientation.z)],[np.sin(self.robot_pos.pose.orientation.z),np.cos(self.robot_pos.pose.orientation.z)]]),point)
                         point = point + np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
-                        if point.x > self.robot_pos.pose.position.x :
-                            if point.y > self.robot_pos.pose.position.y :
+                        if point[0] > self.robot_pos.pose.position.x :
+                            if point[1] > self.robot_pos.pose.position.y :
                                 quadrants[0].append(point)
                                 points_in_quad[0] = True
                             else :
                                 quadrants[3].append(point)
                                 points_in_quad[3] = True
                         else :
-                            if point.y > self.robot_pos.pose.position.y :
+                            if point[1] > self.robot_pos.pose.position.y :
                                 quadrants[1].append(point)
                                 points_in_quad[1] = True
                             else :
