@@ -119,7 +119,7 @@ class Labyrinth_Solver:
     
     def state_callback(self,data):
         '''Callback function for the state'''
-        if not data.data :
+        if data.data :
             # Next State
             if self.state == State.MOVING_TO_EDGE :
                 self.state = State.WAITING
