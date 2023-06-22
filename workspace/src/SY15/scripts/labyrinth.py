@@ -126,7 +126,7 @@ class Labyrinth_Solver:
     def lidar_callback(self,data):
         '''Callback function for the lidar'''
         # If the robot is moving, wait for it to stop
-        if self.state == State.MOVING_TO_EDGE or self.state == State.MOVING_TO_CENTER :
+        if self.state == State.MOVING_TO_EDGE or self.state == State.MOVING_TO_CENTER or self.robot_pos is None :
             return
         
         # Initialization of the first tile
