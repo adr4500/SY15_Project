@@ -5,14 +5,14 @@ import rospy
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped, Quaternion, Point
 from visualization_msgs.msg import MarkerArray, Marker
 from enum import Enum
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool,Float32
 
 # Enum of directions
 Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
 
 State = Enum('State',['MOVING_TO_EDGE','WAITING','MOVING_TO_CENTER','MAPPING'])
 
-class Tile :
+class Tile : 
     '''This class represents one cell of the labyrinth, the labyrinth is defined recursively as a Tile tree'''
     def __init__(self,parent=None):
         self.corners=[None,None,None,None] # [top_left,top_right,bottom_left,bottom_right]
@@ -38,10 +38,10 @@ class Tile :
 
     def create_child(self,direction):
         '''Creates a child cell in the given direction'''
-        if self.children[direction.value] is not None :
+        if self.children[direction.value-1] is not None :
             raise ValueError("The child cell already exists")
         else :
-            self.children[direction.value] = Tile(self)
+            self.children[direction.value-1] = Tile(self)
 
             # Connect the tiles
             if direction == Direction.UP :
@@ -114,6 +114,7 @@ class Labyrinth_Solver:
         self.target_publisher = rospy.Publisher('/target',Pose,queue_size=10)
         self.pos_subscriber = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pos_callback)
         self.state_subscription = rospy.Subscriber("/state_check",Bool,self.state_callback)
+        self.sight_publisher = rospy.Publisher('/sight',Float32,queue_size=10)
 
         rospy.spin()
     
@@ -125,7 +126,6 @@ class Labyrinth_Solver:
                 self.state = State.WAITING
             elif self.state == State.MOVING_TO_CENTER :
                 self.state = State.MAPPING
-        print("STATE : {}".format(self.state))
 
     
     def lidar_callback(self,data):
@@ -169,6 +169,9 @@ class Labyrinth_Solver:
 
                 # Initialize tile size from the entrance
                 self.tile_size = np.linalg.norm(entrance_points[0]-entrance_points[1])
+                sight = Float32()
+                sight.data = self.tile_size*2
+                self.sight_publisher.publish(sight)
 
                 # Go to entrance
                 target_coord = np.mean(entrance_points,axis=0)
@@ -187,13 +190,13 @@ class Labyrinth_Solver:
                 distance = self.tile_size/2
                 pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
                 if direction == Direction.UP :
-                    target_coord = pos + np.array([0,distance])
-                elif direction == Direction.RIGHT :
-                    target_coord = pos + np.array([distance,0])
-                elif direction == Direction.DOWN :
-                    target_coord = pos + np.array([0,-distance])
-                elif direction == Direction.LEFT :
                     target_coord = pos + np.array([-distance,0])
+                elif direction == Direction.RIGHT :
+                    target_coord = pos + np.array([0,-distance])
+                elif direction == Direction.DOWN :
+                    target_coord = pos + np.array([distance,0])
+                elif direction == Direction.LEFT :
+                    target_coord = pos + np.array([0,distance])
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
                 self.state = State.MOVING_TO_CENTER
@@ -225,13 +228,13 @@ class Labyrinth_Solver:
                                 quadrants[2].append(point)
                                 points_in_quad[2] = True
                     if points_in_quad[0] and points_in_quad[1] :
-                        walls[Direction.UP.value] = True
+                        walls[Direction.UP.value-1] = True
                     if points_in_quad[1] and points_in_quad[3] :
-                        walls[Direction.RIGHT.value] = True
+                        walls[Direction.RIGHT.value-1] = True
                     if points_in_quad[2] and points_in_quad[3] :
-                        walls[Direction.DOWN.value] = True
+                        walls[Direction.DOWN.value-1] = True
                     if points_in_quad[0] and points_in_quad[2] :
-                        walls[Direction.LEFT.value] = True
+                        walls[Direction.LEFT.value-1] = True
 
                 
                 # Sort points by distance to the robot
@@ -256,14 +259,16 @@ class Labyrinth_Solver:
                 self.current_tile.extrapolate_corners()
 
                 # If all corners are defined, create the children
-                if None not in self.current_tile.get_corners() :
+                cor = self.current_tile.get_corners()
+                is_defined = type(cor[0]) != type(None) and type(cor[1]) != type(None) and type(cor[2]) != type(None) and type(cor[3]) != type(None)
+                if is_defined :
                     for direction in Direction :
-                        if not walls[direction.value]:
+                        if not walls[direction.value-1]:
                             self.current_tile.create_child(direction)
                 
                 # Decide to move :
                 # If tile is mapped, go to child
-                if None not in self.current_tile.get_corners() :
+                if is_defined :
                     for child in self.current_tile.children :
                         if child is not None :
                             if not child.visited :
@@ -281,7 +286,29 @@ class Labyrinth_Solver:
                     self.target_publisher.publish(target)
                     return
                 else :
-                    pass
+                    distance = self.tile_size
+                    if type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[1]) == type(None) :
+                        direction = Direction.UP
+                    elif type(self.current_tile.get_corners()[1]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
+                        direction = Direction.RIGHT
+                    elif type(self.current_tile.get_corners()[2]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
+                        direction = Direction.DOWN
+                    elif type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[2]) == type(None) :
+                        direction = Direction.LEFT
+                    
+                    pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
+                    if direction == Direction.UP :
+                        target_coord = pos + np.array([distance,0])
+                    elif direction == Direction.RIGHT :
+                        target_coord = pos + np.array([0,distance])
+                    elif direction == Direction.DOWN :
+                        target_coord = pos + np.array([-distance,0])
+                    elif direction == Direction.LEFT :
+                        target_coord = pos + np.array([0,-distance])
+                    target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
+                    self.target_publisher.publish(target)
+                    self.state = State.MOVING_TO_CENTER
+                    return
 
         
 
