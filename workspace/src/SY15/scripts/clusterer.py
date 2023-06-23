@@ -19,7 +19,7 @@ def callback(msg):
 
     # ToDo: Determine k and D values
     k = 8
-    D = 0.4
+    D = 0.2
     
     # ToDo: Clustering algorithm
     for i in range(k, points.shape[0]):
