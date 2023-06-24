@@ -39,7 +39,7 @@ class TrajectoryControllerNode:
         # You might need to adjust the gains (kp_linear, kp_angular) for your system
         
         if not self.desired_trajectory:
-            print("attente de nouveau point !")
+            # print("attente de nouveau point !")
             return
         
         kp_linear = 0.3
@@ -55,8 +55,8 @@ class TrajectoryControllerNode:
         desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
         desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
 
-        print("Point visé : ("+str(desired_pose_coord_x)+","+str(desired_pose_coord_y)+")")
-        print("Point actuelle : ("+str(current_pose.position.x)+","+str(current_pose.position.y)+")")
+        # print("Point visé : ("+str(desired_pose_coord_x)+","+str(desired_pose_coord_y)+")")
+        # print("Point actuelle : ("+str(current_pose.position.x)+","+str(current_pose.position.y)+")")
 
         # Calculate position difference
         dx = desired_pose_coord_x - current_pose.position.x
@@ -80,7 +80,7 @@ class TrajectoryControllerNode:
         #print("Angle difference : "+str(diff_angle))
         #tant que la diff d'angle est sup à 5 degre
         if self.first_passage == True :
-            print("Premier passage")
+            # print("Premier passage")
             #on est deja passé dans le premier passage
             self.first_passage = False
             #on l'axe de déplacement
@@ -101,7 +101,7 @@ class TrajectoryControllerNode:
             
 
         if(abs(diff_angle) > 0.08 and self.reglage_angulaire == False and self.reglage_lineaire == False and self.est_marche_arriere == False):
-            print("Reglage angulaire 1")
+            # print("Reglage angulaire 1")
             linear_velocity = 0
             angular_velocity = kp_angular * (diff_angle)
         #on passe va ensuite au point
@@ -109,7 +109,7 @@ class TrajectoryControllerNode:
             self.reglage_angulaire = True
         
         if self.reglage_angulaire == True and self.reglage_lineaire == False:
-            print("Reglage lineaire")
+            # print("Reglage lineaire")
             if(self.est_marche_arriere == False):
                 linear_velocity = kp_linear * math.sqrt(dx**2 + dy**2)
                 angular_velocity = kp_angular * (diff_angle)
@@ -151,7 +151,7 @@ class TrajectoryControllerNode:
 
             
 
-            print("Nouveau Point visé : ("+str(desired_pose_coord_x)+","+str(desired_pose_coord_y)+")")
+            # print("Nouveau Point visé : ("+str(desired_pose_coord_x)+","+str(desired_pose_coord_y)+")")
             #on refait les calculs
             dx = desired_pose_coord_x - current_pose.position.x
             dy = desired_pose_coord_y - current_pose.position.y
@@ -159,16 +159,16 @@ class TrajectoryControllerNode:
             desired_heading = math.atan2(dy, dx)
             #self.vect_desired.append(desired_heading)
 
-            print("Angle desiré : "+str(desired_heading))
+            # print("Angle desiré : "+str(desired_heading))
             current_heading = 2 * math.atan2(current_pose.orientation.z, current_pose.orientation.w)
             #self.vect_current.append(current_heading)
-            print("Angle courant : "+str(current_heading))
+            # print("Angle courant : "+str(current_heading))
             # Calculate linear and angular velocity commands
             diff_angle = desired_heading - current_heading + math.pi
             diff_angle = diff_angle % (2*math.pi)
             diff_angle = diff_angle - math.pi
-            print("Angle diff : "+str(diff_angle))
-            print("Reglage angulaire 2")
+            # print("Angle diff : "+str(diff_angle))
+            # print("Reglage angulaire 2")
             linear_velocity = 0
             angular_velocity = kp_angular * (diff_angle)
 
@@ -184,7 +184,7 @@ class TrajectoryControllerNode:
                 self.desired_trajectory = []
                 self.reglage_angulaire = False
                 self.reglage_lineaire = False
-                print("Fin")
+                # print("Fin")
         
                 return
 

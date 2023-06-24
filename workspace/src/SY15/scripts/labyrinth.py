@@ -6,6 +6,7 @@ from geometry_msgs.msg import Pose, PoseWithCovarianceStamped, Quaternion, Point
 from visualization_msgs.msg import MarkerArray, Marker
 from enum import Enum
 from std_msgs.msg import Bool,Float32
+from random import shuffle
 
 # Enum of directions
 Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
@@ -20,10 +21,11 @@ class Tile :
         self.parent_direction = None
         self.children = [None,None,None,None] # [up,right,down,left]
         self.visited = False
+        self.walls = [False,False,False,False] # [up,right,down,left]
     
     def get_center(self):
         '''Returns the center of the cell'''
-        if None in self.corners :
+        if None in self.corners : # TO FIX
             raise ValueError("The corners of the cell are not defined")
         else :
             return np.mean(self.corners,axis=0)
@@ -45,42 +47,40 @@ class Tile :
 
             # Connect the tiles
             if direction == Direction.UP :
-                self.children[direction].set_corner(2,self.corners[0])
-                self.children[direction].set_corner(3,self.corners[1])
-                self.children[direction].parent_direction = Direction.DOWN
+                self.children[direction.value-1].set_corner(2,self.corners[0])
+                self.children[direction.value-1].set_corner(3,self.corners[1])
+                self.children[direction.value-1].parent_direction = Direction.DOWN
             elif direction == Direction.RIGHT :
-                self.children[direction].set_corner(0,self.corners[1])
-                self.children[direction].set_corner(2,self.corners[3])
-                self.children[direction].parent_direction = Direction.LEFT
+                self.children[direction.value-1].set_corner(0,self.corners[1])
+                self.children[direction.value-1].set_corner(2,self.corners[3])
+                self.children[direction.value-1].parent_direction = Direction.LEFT
             elif direction == Direction.DOWN :
-                self.children[direction].set_corner(0,self.corners[2])
-                self.children[direction].set_corner(1,self.corners[3])
-                self.children[direction].parent_direction = Direction.UP
+                self.children[direction.value-1].set_corner(0,self.corners[2])
+                self.children[direction.value-1].set_corner(1,self.corners[3])
+                self.children[direction.value-1].parent_direction = Direction.UP
             elif direction == Direction.LEFT :
-                self.children[direction].set_corner(1,self.corners[0])
-                self.children[direction].set_corner(3,self.corners[2])
-                self.children[direction].parent_direction = Direction.RIGHT
+                self.children[direction.value-1].set_corner(1,self.corners[0])
+                self.children[direction.value-1].set_corner(3,self.corners[2])
+                self.children[direction.value-1].parent_direction = Direction.RIGHT
+            
+            print(f"Created child in direction {direction}, coords are {self.children[direction.value-1].get_corners()}")
         
     def extrapolate_corners(self):
         # If two diagonal corners are defined, extrapolate orthogonaly the two others
         if self.corners[0] is not None and self.corners[3] is not None :
             if self.corners[1] is None :
-                self.corners[1] = np.array([[],[]])
-                self.corners[1][0] = self.corners[0][0]
-                self.corners[1][1] = self.corners[3][1]
+                extrapolated_point = [self.corners[0][0], self.corners[3][1]]
+                self.corners[1] = np.array(extrapolated_point)
             if self.corners[2] is None :
-                self.corners[2] = np.array([[],[]])
-                self.corners[2][0] = self.corners[3][0]
-                self.corners[2][1] = self.corners[0][1]
+                extrapolated_point = [self.corners[3][0], self.corners[0][1]]
+                self.corners[2] = np.array(extrapolated_point)
         elif self.corners[1] is not None and self.corners[2] is not None :
             if self.corners[0] is None :
-                self.corners[0] = np.array([[],[]])
-                self.corners[0][0] = self.corners[1][0]
-                self.corners[0][1] = self.corners[2][1]
+                extrapolated_point = [self.corners[1][0], self.corners[2][1]]
+                self.corners[0] = np.array(extrapolated_point)
             if self.corners[3] is None :
-                self.corners[3] = np.array([[],[]])
-                self.corners[3][0] = self.corners[2][0]
-                self.corners[3][1] = self.corners[1][1]
+                extrapolated_point = [self.corners[2][0], self.corners[1][1]]
+                self.corners[3] = np.array(extrapolated_point)
     
     def get_parent_edge(self):
         '''Returns the entrance of the parent cell'''
@@ -88,13 +88,18 @@ class Tile :
             raise ValueError("The cell has no parent")
         else :
             if self.parent_direction == Direction.UP :
-                return np.mean([self.corners[2],self.corners[3]],axis=0)
-            elif self.parent_direction == Direction.RIGHT :
-                return np.mean([self.corners[0],self.corners[2]],axis=0)
-            elif self.parent_direction == Direction.DOWN :
                 return np.mean([self.corners[0],self.corners[1]],axis=0)
-            elif self.parent_direction == Direction.LEFT :
+            elif self.parent_direction == Direction.RIGHT :
                 return np.mean([self.corners[1],self.corners[3]],axis=0)
+            elif self.parent_direction == Direction.DOWN :
+                return np.mean([self.corners[2],self.corners[3]],axis=0)
+            elif self.parent_direction == Direction.LEFT :
+                return np.mean([self.corners[0],self.corners[2]],axis=0)
+    
+    def update_walls(self,walls):
+        '''Updates the walls of the cell'''
+        # Locical or on each wall
+        self.walls = [self.walls[i] or walls[i] for i in range(len(self.walls))]
 
     
 class Labyrinth_Solver:
@@ -170,19 +175,19 @@ class Labyrinth_Solver:
                 # Initialize tile size from the entrance
                 self.tile_size = np.linalg.norm(entrance_points[0]-entrance_points[1])
                 sight = Float32()
-                sight.data = self.tile_size*2
+                sight.data = self.tile_size * 1.5 # It is very important that the sight of the robot is greater than the deletion distance
                 self.sight_publisher.publish(sight)
 
                 # Go to entrance
                 target_coord = np.mean(entrance_points,axis=0)
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
-                print(target)
                 self.target_publisher.publish(target)
                 self.current_tile = self.first_tile
                 self.state = State.MOVING_TO_EDGE
                 self.current_tile.visited = True
+                print("Moving to first tile edge")
                 return
-        
+
         else :
             if self.state == State.WAITING :
                 # Bring the robot to the center of the tile
@@ -192,20 +197,22 @@ class Labyrinth_Solver:
                 if direction == Direction.UP :
                     target_coord = pos + np.array([-distance,0])
                 elif direction == Direction.RIGHT :
-                    target_coord = pos + np.array([0,-distance])
+                    target_coord = pos + np.array([0,distance])
                 elif direction == Direction.DOWN :
                     target_coord = pos + np.array([distance,0])
                 elif direction == Direction.LEFT :
-                    target_coord = pos + np.array([0,distance])
+                    target_coord = pos + np.array([0,-distance])
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
                 self.state = State.MOVING_TO_CENTER
+                print("Moving to center")
                 return
             elif self.state == State.MAPPING :
                 # Get the closest points in each quadrant
                 quadrants = [[],[],[],[]] # [top_left,top_right,bottom_left,bottom_right]
                 walls = [False,False,False,False]
                 for marker in data.markers :
+                    print("Marker found")
                     points_in_quad = [False,False,False,False]
                     for point in marker.points :
                         # Change base from robot coords to general coords
@@ -217,16 +224,20 @@ class Labyrinth_Solver:
                             if point[1] > self.robot_pos.pose.position.y :
                                 quadrants[0].append(point)
                                 points_in_quad[0] = True
+                                print("\tPoint in quad 0")
+                            else :
+                                quadrants[1].append(point)
+                                points_in_quad[1] = True
+                                print("\tPoint in quad 1")
+                        else :
+                            if point[1] > self.robot_pos.pose.position.y :
+                                quadrants[2].append(point)
+                                points_in_quad[2] = True
+                                print("\tPoint in quad 2")
                             else :
                                 quadrants[3].append(point)
                                 points_in_quad[3] = True
-                        else :
-                            if point[1] > self.robot_pos.pose.position.y :
-                                quadrants[1].append(point)
-                                points_in_quad[1] = True
-                            else :
-                                quadrants[2].append(point)
-                                points_in_quad[2] = True
+                                print("\tPoint in quad 3")
                     if points_in_quad[0] and points_in_quad[1] :
                         walls[Direction.UP.value-1] = True
                     if points_in_quad[1] and points_in_quad[3] :
@@ -236,6 +247,7 @@ class Labyrinth_Solver:
                     if points_in_quad[0] and points_in_quad[2] :
                         walls[Direction.LEFT.value-1] = True
 
+                self.current_tile.update_walls(walls)
                 
                 # Sort points by distance to the robot
                 for quadrant in quadrants :
@@ -247,29 +259,38 @@ class Labyrinth_Solver:
                     if quadrant != [] :
                         closest_points.append(quadrant[0])
                 
+                print(f"Points found : {closest_points}")
+                
                 # Delete points that are too far
                 for i in range(len(closest_points)):
-                    if np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size/2 :
+                    if np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size :
                         closest_points[i] = None
-                
+
+                print(f"Points after deletion : {closest_points}")
+
                 # Update the corners of the current tile
                 for i in range(len(closest_points)):
                     if closest_points[i] is not None :
                         self.current_tile.set_corner(i,closest_points[i])
+                print(f"Tile corners before extrapolation : {self.current_tile.get_corners()}")
                 self.current_tile.extrapolate_corners()
+
+                print(f"Tile corners after extrapolation : {self.current_tile.get_corners()}")
 
                 # If all corners are defined, create the children
                 cor = self.current_tile.get_corners()
                 is_defined = type(cor[0]) != type(None) and type(cor[1]) != type(None) and type(cor[2]) != type(None) and type(cor[3]) != type(None)
                 if is_defined :
                     for direction in Direction :
-                        if not walls[direction.value-1]:
+                        if not self.current_tile.walls[direction.value-1] and self.current_tile.parent_direction != direction:
                             self.current_tile.create_child(direction)
                 
                 # Decide to move :
                 # If tile is mapped, go to child
                 if is_defined :
-                    for child in self.current_tile.children :
+                    children = [child for child in self.current_tile.children]
+                    shuffle(children)
+                    for child in children :
                         if child is not None :
                             if not child.visited :
                                 self.current_tile = child
@@ -277,6 +298,7 @@ class Labyrinth_Solver:
                                 target_coord = self.current_tile.get_parent_edge()
                                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                                 self.target_publisher.publish(target)
+                                print ("Moving to child edge")
                                 return
                     # If all children are visited, go to parent
                     self.current_tile = self.current_tile.parent
@@ -284,9 +306,10 @@ class Labyrinth_Solver:
                     target_coord = self.current_tile.get_center()
                     target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                     self.target_publisher.publish(target)
+                    print ("Moving to parent center")
                     return
                 else :
-                    distance = self.tile_size
+                    distance = self.tile_size/2
                     if type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[1]) == type(None) :
                         direction = Direction.UP
                     elif type(self.current_tile.get_corners()[1]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
@@ -308,6 +331,10 @@ class Labyrinth_Solver:
                     target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                     self.target_publisher.publish(target)
                     self.state = State.MOVING_TO_CENTER
+                    print("Could not find tile edge : continuing within the tile")
+                    print("Current mapping state :")
+                    print(f"\tWalls : {self.current_tile.walls} # [up,right,down,left]")
+                    print(f"\tCorners : {self.current_tile.get_corners()} # [top_left,top_right,bottom_left,bottom_right]")
                     return
 
         

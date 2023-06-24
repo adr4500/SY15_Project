@@ -14,7 +14,7 @@ PC2FIELDS = [PointField('x', 0, PointField.FLOAT32, 1),
              PointField('c', 12, PointField.INT16, 1)
 ]
 
-sight = 0.4
+sight = 0.6
 
 def callback(msg):
     global sight

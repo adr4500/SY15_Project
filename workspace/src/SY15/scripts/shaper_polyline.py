@@ -49,10 +49,17 @@ def rdp(points, eps):
 
 def callback(msg, eps):
     clusters = {}
+    temp = []
     polylines = MarkerArray()
     for x,y,z,c in read_points(msg):
-        if c not in clusters.keys(): clusters[c] = []
-        clusters[c].append([x,y])
+        if c == -1 :
+            temp.append([x,y])
+        else :
+            if c not in clusters.keys(): clusters[c] = []
+            clusters[c].append([x,y])
+    min_key = min(clusters.keys())
+    if clusters[min_key] :
+        clusters[min_key] = temp + clusters[min_key]
 
     for c, points in clusters.items():
         poly = rdp(np.array(points), eps)
