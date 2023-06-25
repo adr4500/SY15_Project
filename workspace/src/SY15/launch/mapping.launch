@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="SY15" type="transformer.py" name="transformer" output="screen"></node>
+    <node pkg="SY15" type="clusterer.py" name="clusterer" output="screen"></node>
+    <node pkg="SY15" type="shaper_polyline.py" name="shaper_polyline" output="screen"></node>
+</launch>

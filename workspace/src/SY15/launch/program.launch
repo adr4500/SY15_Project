@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="SY15" type="state_estimation.py" name="state_estimation" output="screen"></node>
+    <node pkg="SY15" type="move_trajectoire.py" name="move_trajectoire" output="screen"></node>
+    <node pkg="SY15" type="labyrinth.py" name="labyrinth" output="screen"></node>
+</launch>

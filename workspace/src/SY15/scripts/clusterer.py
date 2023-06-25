@@ -18,14 +18,15 @@ def callback(msg):
     groups = np.zeros(points.shape[0], dtype=int)
 
     # ToDo: Determine k and D values
-    k = 8
+    k = 15
     D = 0.2
     
     # ToDo: Clustering algorithm
-    for i in range(k, points.shape[0]):
+    for i in range(0, points.shape[0]):
         d=[D+1 for i in range(k)]
         for j in range(1,k) :
-            d[j-1]=np.sqrt((points[i,0]-points[i-j,0])**2+(points[i,1]-points[i-j,1])**2)
+            if i-j>=0 :
+                d[j-1]=np.sqrt((points[i,0]-points[i-j,0])**2+(points[i,1]-points[i-j,1])**2)
         dmin=min(d)
         jmin=d.index(dmin)+1
         
@@ -33,6 +34,17 @@ def callback(msg):
             if groups[i-jmin]==0 :
                 groups[i-jmin]=max(groups)+1
             groups[i]=groups[i-jmin]
+    
+    are_same_groupe = False
+    other_group = max(groups)
+    if other_group > 1 :
+        for point in points[groups==other_group] :
+            for point2 in points[groups==1] :
+                if np.sqrt((point[0]-point2[0])**2+(point[1]-point2[1])**2)<D :
+                    are_same_groupe = True
+                    break
+    if are_same_groupe :
+        groups[groups==other_group]=-1
     P=[]
     C=[]
     for i in range(points.shape[0]) :
