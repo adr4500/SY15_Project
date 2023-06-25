@@ -7,6 +7,7 @@ from visualization_msgs.msg import MarkerArray, Marker
 from enum import Enum
 from std_msgs.msg import Bool,Float32
 from random import shuffle
+import math
 
 # Enum of directions
 Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
@@ -25,7 +26,7 @@ class Tile :
     
     def get_center(self):
         '''Returns the center of the cell'''
-        if None in self.corners : # TO FIX
+        if np.any(self.corners == None) : # TO FIX
             raise ValueError("The corners of the cell are not defined")
         else :
             return np.mean(self.corners,axis=0)
@@ -113,7 +114,7 @@ class Labyrinth_Solver:
 
         self.robot_pos = None
 
-        self.state = None
+        self.state = State.MAPPING
         
         self.lidar_subscriber = rospy.Subscriber('/lidar/polylines',MarkerArray,self.lidar_callback)
         self.target_publisher = rospy.Publisher('/target',Pose,queue_size=10)
@@ -139,203 +140,173 @@ class Labyrinth_Solver:
         if self.state == State.MOVING_TO_EDGE or self.state == State.MOVING_TO_CENTER or self.robot_pos is None :
             return
         
-        # Initialization of the first tile
-        if self.first_tile is None :
-            self.first_tile = Tile()
-            # Detect entrance : two alligned segments with a gap between them
-            if len(data.markers) != 2 :
-                print("WARNING : {} Markers detected")
-                raise ValueError("The labyrinth entrance is not detected")
+        if self.state == State.WAITING :
+            # Bring the robot to the center of the tile
+            direction = self.current_tile.parent_direction
+            distance = self.tile_size/2
+            pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
+            if direction == Direction.UP :
+                target_coord = pos + np.array([-distance,0])
+            elif direction == Direction.RIGHT :
+                target_coord = pos + np.array([0,distance])
+            elif direction == Direction.DOWN :
+                target_coord = pos + np.array([distance,0])
+            elif direction == Direction.LEFT :
+                target_coord = pos + np.array([0,-distance])
+            target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
+            self.target_publisher.publish(target)
+            self.state = State.MOVING_TO_CENTER
+            print("Moving to center")
+            return
+        elif self.state == State.MAPPING :
+            # Get the closest points in each quadrant
+            quadrants = [[],[],[],[]] # [top_left,top_right,bottom_left,bottom_right]
+            walls = [False,False,False,False]
+            # Get orientation from quaternion
+            robot_orientation = 2 * math.atan2(self.robot_pos.pose.orientation.z, self.robot_pos.pose.orientation.w)
+            print(f"Robot position : {self.robot_pos.pose.position.x,self.robot_pos.pose.position.y}, angle : {robot_orientation}")
+            for marker in data.markers :
+                print("Marker found")
+                points_in_quad = [False,False,False,False]
+                for point in marker.points :
+                    # Change base from robot coords to general coords
+                    point = np.array([point.x,point.y])
+                    # Rotate point
+                    point = np.dot(np.array([[np.cos(robot_orientation),-np.sin(robot_orientation)],[np.sin(robot_orientation),np.cos(robot_orientation)]]),point)
+                    point = point + np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
+                    if point[0] > self.robot_pos.pose.position.x :
+                        if point[1] > self.robot_pos.pose.position.y :
+                            quadrants[0].append(point)
+                            points_in_quad[0] = True
+                            print(f"\tPoint in quad 0 : {point}")
+                        else :
+                            quadrants[1].append(point)
+                            points_in_quad[1] = True
+                            print(f"\tPoint in quad 1 : {point}")
+                    else :
+                        if point[1] > self.robot_pos.pose.position.y :
+                            quadrants[2].append(point)
+                            points_in_quad[2] = True
+                            print(f"\tPoint in quad 2 : {point}")
+                        else :
+                            quadrants[3].append(point)
+                            points_in_quad[3] = True
+                            print(f"\tPoint in quad 3 : {point}")
+                if points_in_quad[0] and points_in_quad[1] :
+                    walls[Direction.UP.value-1] = True
+                if points_in_quad[1] and points_in_quad[3] :
+                    walls[Direction.RIGHT.value-1] = True
+                if points_in_quad[2] and points_in_quad[3] :
+                    walls[Direction.DOWN.value-1] = True
+                if points_in_quad[0] and points_in_quad[2] :
+                    walls[Direction.LEFT.value-1] = True
+            
+            
+            # Sort points by distance to the robot
+            for quadrant in quadrants :
+                quadrant.sort(key=lambda point: np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point[0],point[1]])))
+            
+            # Get the closest point in each quadrant
+            closest_points = []
+            for quadrant in quadrants :
+                if quadrant != [] :
+                    closest_points.append(quadrant[0])
+                else :
+                    closest_points.append(None)
+            
+            print(f"Points found : {closest_points}")
+
+            if self.current_tile is None :
+                self.current_tile = Tile()
+                self.current_tile.update_walls(walls)
+                self.current_tile.walls[Direction.UP.value-1]=False
+                self.first_tile = self.current_tile
+                # The mean of the distances between the points of each quadrant
+                distance1 = np.linalg.norm(np.array([closest_points[0][0],closest_points[0][1]])-np.array([closest_points[1][0],closest_points[1][1]]))
+                distance2 = np.linalg.norm(np.array([closest_points[2][0],closest_points[2][1]])-np.array([closest_points[3][0],closest_points[3][1]]))
+                distance3 = np.linalg.norm(np.array([closest_points[0][0],closest_points[0][1]])-np.array([closest_points[2][0],closest_points[2][1]]))
+                distance4 = np.linalg.norm(np.array([closest_points[1][0],closest_points[1][1]])-np.array([closest_points[3][0],closest_points[3][1]]))
+                self.tile_size = np.mean([distance1,distance2,distance3,distance4])
+                self.sight_publisher.publish(Float32(self.tile_size*1.2))
             else :
-                # Take the closest point to the robot of each segment
-                first_segment = [data.markers[0].points[0],data.markers[0].points[-1]]
-                second_segment = [data.markers[1].points[0],data.markers[1].points[-1]]
-                first_segment_distances = [np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point.x,point.y])) for point in first_segment]
-                second_segment_distances = [np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point.x,point.y])) for point in second_segment]
+                self.current_tile.update_walls(walls)
+            
+            # Delete points that are too far
+            for i in range(len(closest_points)):
+                if closest_points[i] is not None and np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size :
+                    closest_points[i] = None
 
-                entrance_points = []
-                if first_segment_distances[0] < first_segment_distances[1] :
-                    entrance_points.append(np.array([first_segment[0].x,first_segment[0].y]))
-                else :
-                    entrance_points.append(np.array([first_segment[1].x,first_segment[1].y]))
+            print(f"Points after deletion : {closest_points}")
 
-                if second_segment_distances[0] < second_segment_distances[1] :
-                    entrance_points.append(np.array([second_segment[0].x,second_segment[0].y]))
-                else :
-                    entrance_points.append(np.array([second_segment[1].x,second_segment[1].y]))
-                
-                # Sort entrance points by x coordinate
-                entrance_points.sort(key=lambda point: point[1])
+            # Update the corners of the current tile
+            for i in range(len(closest_points)):
+                if closest_points[i] is not None :
+                    self.current_tile.set_corner(i,closest_points[i])
+            print(f"Tile corners before extrapolation : {self.current_tile.get_corners()}")
+            self.current_tile.extrapolate_corners()
 
-                # Set the corners of the first tile
-                self.first_tile.set_corner(2,[entrance_points[0][0],entrance_points[0][1]])
-                self.first_tile.set_corner(3,[entrance_points[1][0],entrance_points[1][1]])
-                self.first_tile.parent_direction = Direction.DOWN
+            print(f"Tile corners after extrapolation : {self.current_tile.get_corners()}")
 
-                # Initialize tile size from the entrance
-                self.tile_size = np.linalg.norm(entrance_points[0]-entrance_points[1])
-                sight = Float32()
-                sight.data = self.tile_size * 1.5 # It is very important that the sight of the robot is greater than the deletion distance
-                self.sight_publisher.publish(sight)
-
-                # Go to entrance
-                target_coord = np.mean(entrance_points,axis=0)
+            # If all corners are defined, create the children
+            cor = self.current_tile.get_corners()
+            is_defined = type(cor[0]) != type(None) and type(cor[1]) != type(None) and type(cor[2]) != type(None) and type(cor[3]) != type(None)
+            if is_defined and self.current_tile.children == [None,None,None,None] :
+                for direction in Direction :
+                    if not self.current_tile.walls[direction.value-1] and self.current_tile.parent_direction != direction:
+                        self.current_tile.create_child(direction)
+            
+            # Decide to move :
+            # If tile is mapped, go to child
+            if is_defined :
+                children = [child for child in self.current_tile.children]
+                shuffle(children)
+                for child in children :
+                    if child is not None :
+                        if not child.visited :
+                            child.visited = True
+                            self.current_tile = child
+                            self.state = State.MOVING_TO_EDGE
+                            target_coord = self.current_tile.get_parent_edge()
+                            target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
+                            self.target_publisher.publish(target)
+                            print ("Moving to child edge")
+                            return
+                # If all children are visited, go to parent
+                self.current_tile = self.current_tile.parent
+                self.state = State.MOVING_TO_CENTER
+                target_coord = self.current_tile.get_center()
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
-                self.current_tile = self.first_tile
-                self.state = State.MOVING_TO_EDGE
-                self.current_tile.visited = True
-                print("Moving to first tile edge")
+                print ("Moving to parent center")
                 return
-
-        else :
-            if self.state == State.WAITING :
-                # Bring the robot to the center of the tile
-                direction = self.current_tile.parent_direction
+            else :
                 distance = self.tile_size/2
+                if type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[1]) == type(None) :
+                    direction = Direction.UP
+                elif type(self.current_tile.get_corners()[1]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
+                    direction = Direction.RIGHT
+                elif type(self.current_tile.get_corners()[2]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
+                    direction = Direction.DOWN
+                elif type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[2]) == type(None) :
+                    direction = Direction.LEFT
+                
                 pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
                 if direction == Direction.UP :
-                    target_coord = pos + np.array([-distance,0])
-                elif direction == Direction.RIGHT :
-                    target_coord = pos + np.array([0,distance])
-                elif direction == Direction.DOWN :
                     target_coord = pos + np.array([distance,0])
-                elif direction == Direction.LEFT :
+                elif direction == Direction.RIGHT :
                     target_coord = pos + np.array([0,-distance])
+                elif direction == Direction.DOWN :
+                    target_coord = pos + np.array([-distance,0])
+                elif direction == Direction.LEFT :
+                    target_coord = pos + np.array([0,distance])
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
                 self.state = State.MOVING_TO_CENTER
-                print("Moving to center")
+                print("Could not find tile edge : continuing within the tile")
+                print("Current mapping state :")
+                print(f"\tWalls : {self.current_tile.walls} # [up,right,down,left]")
+                print(f"\tCorners : {self.current_tile.get_corners()} # [top_left,top_right,bottom_left,bottom_right]")
                 return
-            elif self.state == State.MAPPING :
-                # Get the closest points in each quadrant
-                quadrants = [[],[],[],[]] # [top_left,top_right,bottom_left,bottom_right]
-                walls = [False,False,False,False]
-                for marker in data.markers :
-                    print("Marker found")
-                    points_in_quad = [False,False,False,False]
-                    for point in marker.points :
-                        # Change base from robot coords to general coords
-                        point = np.array([point.x,point.y])
-                        # Rotate point
-                        point = np.dot(np.array([[np.cos(self.robot_pos.pose.orientation.z),-np.sin(self.robot_pos.pose.orientation.z)],[np.sin(self.robot_pos.pose.orientation.z),np.cos(self.robot_pos.pose.orientation.z)]]),point)
-                        point = point + np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
-                        if point[0] > self.robot_pos.pose.position.x :
-                            if point[1] > self.robot_pos.pose.position.y :
-                                quadrants[0].append(point)
-                                points_in_quad[0] = True
-                                print("\tPoint in quad 0")
-                            else :
-                                quadrants[1].append(point)
-                                points_in_quad[1] = True
-                                print("\tPoint in quad 1")
-                        else :
-                            if point[1] > self.robot_pos.pose.position.y :
-                                quadrants[2].append(point)
-                                points_in_quad[2] = True
-                                print("\tPoint in quad 2")
-                            else :
-                                quadrants[3].append(point)
-                                points_in_quad[3] = True
-                                print("\tPoint in quad 3")
-                    if points_in_quad[0] and points_in_quad[1] :
-                        walls[Direction.UP.value-1] = True
-                    if points_in_quad[1] and points_in_quad[3] :
-                        walls[Direction.RIGHT.value-1] = True
-                    if points_in_quad[2] and points_in_quad[3] :
-                        walls[Direction.DOWN.value-1] = True
-                    if points_in_quad[0] and points_in_quad[2] :
-                        walls[Direction.LEFT.value-1] = True
-
-                self.current_tile.update_walls(walls)
-                
-                # Sort points by distance to the robot
-                for quadrant in quadrants :
-                    quadrant.sort(key=lambda point: np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([point[0],point[1]])))
-                
-                # Get the closest point in each quadrant
-                closest_points = []
-                for quadrant in quadrants :
-                    if quadrant != [] :
-                        closest_points.append(quadrant[0])
-                
-                print(f"Points found : {closest_points}")
-                
-                # Delete points that are too far
-                for i in range(len(closest_points)):
-                    if np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size :
-                        closest_points[i] = None
-
-                print(f"Points after deletion : {closest_points}")
-
-                # Update the corners of the current tile
-                for i in range(len(closest_points)):
-                    if closest_points[i] is not None :
-                        self.current_tile.set_corner(i,closest_points[i])
-                print(f"Tile corners before extrapolation : {self.current_tile.get_corners()}")
-                self.current_tile.extrapolate_corners()
-
-                print(f"Tile corners after extrapolation : {self.current_tile.get_corners()}")
-
-                # If all corners are defined, create the children
-                cor = self.current_tile.get_corners()
-                is_defined = type(cor[0]) != type(None) and type(cor[1]) != type(None) and type(cor[2]) != type(None) and type(cor[3]) != type(None)
-                if is_defined :
-                    for direction in Direction :
-                        if not self.current_tile.walls[direction.value-1] and self.current_tile.parent_direction != direction:
-                            self.current_tile.create_child(direction)
-                
-                # Decide to move :
-                # If tile is mapped, go to child
-                if is_defined :
-                    children = [child for child in self.current_tile.children]
-                    shuffle(children)
-                    for child in children :
-                        if child is not None :
-                            if not child.visited :
-                                self.current_tile = child
-                                self.state = State.MOVING_TO_EDGE
-                                target_coord = self.current_tile.get_parent_edge()
-                                target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
-                                self.target_publisher.publish(target)
-                                print ("Moving to child edge")
-                                return
-                    # If all children are visited, go to parent
-                    self.current_tile = self.current_tile.parent
-                    self.state = State.MOVING_TO_CENTER
-                    target_coord = self.current_tile.get_center()
-                    target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
-                    self.target_publisher.publish(target)
-                    print ("Moving to parent center")
-                    return
-                else :
-                    distance = self.tile_size/2
-                    if type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[1]) == type(None) :
-                        direction = Direction.UP
-                    elif type(self.current_tile.get_corners()[1]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
-                        direction = Direction.RIGHT
-                    elif type(self.current_tile.get_corners()[2]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :
-                        direction = Direction.DOWN
-                    elif type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[2]) == type(None) :
-                        direction = Direction.LEFT
-                    
-                    pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
-                    if direction == Direction.UP :
-                        target_coord = pos + np.array([distance,0])
-                    elif direction == Direction.RIGHT :
-                        target_coord = pos + np.array([0,distance])
-                    elif direction == Direction.DOWN :
-                        target_coord = pos + np.array([-distance,0])
-                    elif direction == Direction.LEFT :
-                        target_coord = pos + np.array([0,-distance])
-                    target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
-                    self.target_publisher.publish(target)
-                    self.state = State.MOVING_TO_CENTER
-                    print("Could not find tile edge : continuing within the tile")
-                    print("Current mapping state :")
-                    print(f"\tWalls : {self.current_tile.walls} # [up,right,down,left]")
-                    print(f"\tCorners : {self.current_tile.get_corners()} # [top_left,top_right,bottom_left,bottom_right]")
-                    return
 
         
 

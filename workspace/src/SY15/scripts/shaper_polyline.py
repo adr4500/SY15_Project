@@ -83,7 +83,7 @@ def callback(msg, eps):
 
 if __name__ == '__main__':
     rospy.init_node('shaper_polyline')
-    eps = rospy.get_param('~eps', 0.15)
+    eps = rospy.get_param('~eps', 0.2)
     pub_polylines = rospy.Publisher('/lidar/polylines', MarkerArray, queue_size=10)
     rospy.Subscriber('/lidar/clusters', PointCloud2, callback, eps)
     rospy.spin()

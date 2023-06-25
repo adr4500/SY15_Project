@@ -137,17 +137,17 @@ class TrajectoryControllerNode:
                     self.axe_deplacement == '+y'
 
             if self.axe_deplacement == '+x':
-                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]*2
+                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0] + 1000
                 desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
             elif self.axe_deplacement == '-x':
-                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]*-2
+                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0] - 1000
                 desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
             elif self.axe_deplacement == '+y':
                 desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
-                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]*2
+                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1] + 1000
             elif self.axe_deplacement == '-y':
                 desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
-                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]*-2
+                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1] - 1000
 
             
 
