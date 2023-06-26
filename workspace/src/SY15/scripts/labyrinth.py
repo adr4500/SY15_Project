@@ -9,10 +9,12 @@ from std_msgs.msg import Bool,Float32
 from random import shuffle
 import math
 
+FINISH_POINT = np.array([0.0,0.0])
+
 # Enum of directions
 Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
 
-State = Enum('State',['MOVING_TO_EDGE','WAITING','MOVING_TO_CENTER','MAPPING'])
+State = Enum('State',['MOVING_TO_EDGE','WAITING','MOVING_TO_CENTER','MAPPING','FINISHED','MOVING_TO_FINISH','OFF'])
 
 class Tile : 
     '''This class represents one cell of the labyrinth, the labyrinth is defined recursively as a Tile tree'''
@@ -113,6 +115,7 @@ class Labyrinth_Solver:
         self.tile_size = 0.3
 
         self.robot_pos = None
+        self.number_of_moves = 0
 
         self.state = State.MAPPING
         
@@ -121,6 +124,7 @@ class Labyrinth_Solver:
         self.pos_subscriber = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pos_callback)
         self.state_subscription = rospy.Subscriber("/state_check",Bool,self.state_callback)
         self.sight_publisher = rospy.Publisher('/sight',Float32,queue_size=10)
+        self.finish_publisher = rospy.Publisher('/panneau_check',Bool,queue_size=10)
 
         self.is_init=True
 
@@ -134,6 +138,13 @@ class Labyrinth_Solver:
                 self.state = State.WAITING
             elif self.state == State.MOVING_TO_CENTER :
                 self.state = State.MAPPING
+            elif self.state == State.MOVING_TO_FINISH :
+                self.state = State.OFF
+                print("Finished")
+                output = Bool()
+                output.data = True
+                self.finish_publisher.publish(output)
+
 
     
     def lidar_callback(self,data):
@@ -141,7 +152,13 @@ class Labyrinth_Solver:
         # If the robot is moving, wait for it to stop
         if not self.is_init :
             return
-        if self.state == State.MOVING_TO_EDGE or self.state == State.MOVING_TO_CENTER or self.robot_pos is None :
+        if self.state == State.MOVING_TO_EDGE or self.state == State.MOVING_TO_CENTER or self.state == State.OFF or self.robot_pos is None :
+            return
+
+        if self.state == State.FINISHED :
+            self.state = MOVING_TO_FINISH
+            target = Pose(Point(FINISH_POINT[0],FINISH_POINT[1],0),Quaternion())
+            self.target_publisher.publish(target)
             return
         
         if self.state == State.WAITING :
@@ -267,9 +284,15 @@ class Labyrinth_Solver:
                     if not self.current_tile.walls[direction.value-1] and self.current_tile.parent_direction != direction:
                         self.current_tile.create_child(direction)
             
+            # Check if the robot is out of the labyrinth
+            if self.current_tile.walls == [None,None,None,None] and not is_defined and self.number_of_moves > 1 :
+                self.state = State.FINISHED
+                return
+            
             # Decide to move :
             # If tile is mapped, go to child
             if is_defined :
+                self.number_of_moves = 0
                 children = [child for child in self.current_tile.children]
                 shuffle(children)
                 for child in children :
@@ -315,6 +338,7 @@ class Labyrinth_Solver:
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
                 self.state = State.MOVING_TO_CENTER
+                self.number_of_moves += 1
                 print("Could not find tile edge : continuing within the tile")
                 print("Current mapping state :")
                 print(f"\tWalls : {self.current_tile.walls} # [up,right,down,left]")
