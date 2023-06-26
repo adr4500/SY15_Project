@@ -42,8 +42,10 @@ class TrajectoryControllerNode:
             # print("attente de nouveau point !")
             return
         
-        kp_linear = 0.3
+        kp_linear = 0.5
         kp_angular = 0.5 
+
+        kp_angular_lin = 0.8
 
 
         # Get current robot pose
@@ -112,7 +114,7 @@ class TrajectoryControllerNode:
             # print("Reglage lineaire")
             if(self.est_marche_arriere == False):
                 linear_velocity = kp_linear * math.sqrt(dx**2 + dy**2)
-                angular_velocity = kp_angular * (diff_angle)
+                angular_velocity = kp_angular_lin * (diff_angle)
             else:
                 linear_velocity =  - kp_linear * math.sqrt(dx**2 + dy**2)
                 angular_velocity = - kp_angular * (diff_angle)

@@ -107,10 +107,10 @@ class Labyrinth_Solver:
     '''Ros node used to map and solve'''
     def __init__(self):
         rospy.init_node('lab_solver')
-        
+        self.is_init=False
         self.first_tile = None
         self.current_tile = None
-        self.tile_size = None
+        self.tile_size = 0.3
 
         self.robot_pos = None
 
@@ -121,6 +121,8 @@ class Labyrinth_Solver:
         self.pos_subscriber = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pos_callback)
         self.state_subscription = rospy.Subscriber("/state_check",Bool,self.state_callback)
         self.sight_publisher = rospy.Publisher('/sight',Float32,queue_size=10)
+
+        self.is_init=True
 
         rospy.spin()
     
@@ -137,13 +139,15 @@ class Labyrinth_Solver:
     def lidar_callback(self,data):
         '''Callback function for the lidar'''
         # If the robot is moving, wait for it to stop
+        if not self.is_init :
+            return
         if self.state == State.MOVING_TO_EDGE or self.state == State.MOVING_TO_CENTER or self.robot_pos is None :
             return
         
         if self.state == State.WAITING :
             # Bring the robot to the center of the tile
             direction = self.current_tile.parent_direction
-            distance = self.tile_size/2
+            distance = self.tile_size*0.4
             pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
             if direction == Direction.UP :
                 target_coord = pos + np.array([-distance,0])
@@ -215,6 +219,13 @@ class Labyrinth_Solver:
                     closest_points.append(None)
             
             print(f"Points found : {closest_points}")
+            
+            # Delete points that are too far
+            for i in range(len(closest_points)):
+                if closest_points[i] is not None and np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size*0.9 :
+                    closest_points[i] = None
+
+            print(f"Points after deletion : {closest_points}")
 
             if self.current_tile is None :
                 self.current_tile = Tile()
@@ -222,21 +233,22 @@ class Labyrinth_Solver:
                 self.current_tile.walls[Direction.UP.value-1]=False
                 self.first_tile = self.current_tile
                 # The mean of the distances between the points of each quadrant
-                distance1 = np.linalg.norm(np.array([closest_points[0][0],closest_points[0][1]])-np.array([closest_points[1][0],closest_points[1][1]]))
-                distance2 = np.linalg.norm(np.array([closest_points[2][0],closest_points[2][1]])-np.array([closest_points[3][0],closest_points[3][1]]))
-                distance3 = np.linalg.norm(np.array([closest_points[0][0],closest_points[0][1]])-np.array([closest_points[2][0],closest_points[2][1]]))
-                distance4 = np.linalg.norm(np.array([closest_points[1][0],closest_points[1][1]])-np.array([closest_points[3][0],closest_points[3][1]]))
-                self.tile_size = np.mean([distance1,distance2,distance3,distance4])
-                self.sight_publisher.publish(Float32(self.tile_size*1.2))
+                distances = []
+                if (closest_points[0] is not None and closest_points[1] is not None) :
+                    distances.append(np.linalg.norm(np.array([closest_points[0][0],closest_points[0][1]])-np.array([closest_points[1][0],closest_points[1][1]])))
+                if (closest_points[2] is not None and closest_points[3] is not None) :
+                    distances.append(np.linalg.norm(np.array([closest_points[2][0],closest_points[2][1]])-np.array([closest_points[3][0],closest_points[3][1]])))
+                if (closest_points[0] is not None and closest_points[2] is not None) :
+                    distances.append(np.linalg.norm(np.array([closest_points[0][0],closest_points[0][1]])-np.array([closest_points[2][0],closest_points[2][1]])))
+                if (closest_points[1] is not None and closest_points[3] is not None) :
+                    distances.append(np.linalg.norm(np.array([closest_points[1][0],closest_points[1][1]])-np.array([closest_points[3][0],closest_points[3][1]])))
+                self.tile_size = np.mean(distances)
+                self.sight_publisher.publish(Float32(self.tile_size))
+                print(f"Taille d'une tuile : {self.tile_size}")
             else :
                 self.current_tile.update_walls(walls)
-            
-            # Delete points that are too far
-            for i in range(len(closest_points)):
-                if closest_points[i] is not None and np.linalg.norm(np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])-np.array([closest_points[i][0],closest_points[i][1]])) > self.tile_size :
-                    closest_points[i] = None
-
-            print(f"Points after deletion : {closest_points}")
+                if self.current_tile == self.first_tile :
+                    self.current_tile.walls[Direction.UP.value-1] = False
 
             # Update the corners of the current tile
             for i in range(len(closest_points)):
@@ -280,7 +292,8 @@ class Labyrinth_Solver:
                 print ("Moving to parent center")
                 return
             else :
-                distance = self.tile_size/2
+                distance = self.tile_size*0.4
+                # TO IMPROVE, DEPLACER EN FONCTION DU BORD DE LA TUILE
                 if type(self.current_tile.get_corners()[0]) == type(None) and type(self.current_tile.get_corners()[1]) == type(None) :
                     direction = Direction.UP
                 elif type(self.current_tile.get_corners()[1]) == type(None) and type(self.current_tile.get_corners()[3]) == type(None) :

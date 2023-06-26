@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="SY15" type="transformer_docking.py" name="transformer_docking" output="screen"></node>
+    <node pkg="SY15" type="clusterer_docking.py" name="clusterer_docking" output="screen"></node>
+    <node pkg="SY15" type="panneau.py" name="panneau" output="screen"></node>
+</launch>
