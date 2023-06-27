@@ -13,6 +13,8 @@ class TrajectoryControllerNode:
         rospy.init_node('trajectory_controller_node', anonymous=True)
         self.suscriber_position = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pose_callback)
         self.suscriber_target = rospy.Subscriber("/target", Pose, self.set_target)
+        self.suscriber_target_angular = rospy.Subscriber("/target_angular", Pose, self.set_target_angular)
+        self.publisher_target_check = rospy.Subscriber("/panneau_check",Bool,self.call_back)
         self.publisher_target_check = rospy.Publisher("/state_check",Bool,queue_size=1)
 
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
@@ -21,11 +23,19 @@ class TrajectoryControllerNode:
         self.reglage_angulaire = False
         self.reglage_lineaire = False
         self.est_marche_arriere = False
+        self.docking = False
+        self.desired_point_angle = []
 
         self.first_passage = True
 
         self.axe_deplacement = 'x'
 
+    def set_target_angular(self, pose:Pose):
+        self.desired_point_angle = []
+        self.desired_point_angle.append((pose.position.x,pose.position.y))
+
+    def call_back(self,bool:Bool):
+        self.docking = True
 
     def set_target(self, pose:Pose):
         self.desired_trajectory = []
@@ -102,7 +112,7 @@ class TrajectoryControllerNode:
                 #self.est_marche_arriere = True
             
 
-        if(abs(diff_angle) > 0.08 and self.reglage_angulaire == False and self.reglage_lineaire == False and self.est_marche_arriere == False):
+        if(abs(diff_angle) > 0.04 and self.reglage_angulaire == False and self.reglage_lineaire == False and self.est_marche_arriere == False):
             # print("Reglage angulaire 1")
             linear_velocity = 0
             angular_velocity = kp_angular * (diff_angle)
@@ -124,35 +134,30 @@ class TrajectoryControllerNode:
         if abs(dx)<0.01 and abs(dy)<0.01:
             self.reglage_lineaire = True
 
-        if self.reglage_lineaire == True  : 
+        if self.reglage_lineaire == True : 
             
             #deuxieme réglage angulaire
-            #suivant l'axe de déplacement on vise angulairement un point plus loin sur le même axe
-            if self.est_marche_arriere == True : 
-                if self.axe_deplacement == '+x':
-                    self.axe_deplacement == '-x'
-                elif self.axe_deplacement == '-x':
-                    self.axe_deplacement == '+x'
-                elif self.axe_deplacement == '+y':
-                    self.axe_deplacement == '-y'
-                elif self.axe_deplacement == '-y':
-                    self.axe_deplacement == '+y'
-
-            if self.axe_deplacement == '+x':
-                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0] + 1000
-                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
-            elif self.axe_deplacement == '-x':
-                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0] - 1000
-                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
-            elif self.axe_deplacement == '+y':
-                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
-                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1] + 1000
-            elif self.axe_deplacement == '-y':
-                desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
-                desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1] - 1000
-
             
+            if self.docking == False : 
 
+                if self.axe_deplacement == '+x':
+                    desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0] + 1000
+                    desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
+                elif self.axe_deplacement == '-x':
+                    desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0] - 1000
+                    desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1]
+                elif self.axe_deplacement == '+y':
+                    desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
+                    desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1] + 1000
+                elif self.axe_deplacement == '-y':
+                    desired_pose_coord_x = self.desired_trajectory[self.point_trajectoire][0]
+                    desired_pose_coord_y = self.desired_trajectory[self.point_trajectoire][1] - 1000
+
+            else : 
+                desired_pose_coord_x = self.desired_point_angle[0][0]
+                desired_pose_coord_y = self.desired_point_angle[0][1]
+            
+            
             # print("Nouveau Point visé : ("+str(desired_pose_coord_x)+","+str(desired_pose_coord_y)+")")
             #on refait les calculs
             dx = desired_pose_coord_x - current_pose.position.x
@@ -171,10 +176,11 @@ class TrajectoryControllerNode:
             diff_angle = diff_angle - math.pi
             # print("Angle diff : "+str(diff_angle))
             # print("Reglage angulaire 2")
+            
             linear_velocity = 0
             angular_velocity = kp_angular * (diff_angle)
 
-            if abs(diff_angle) < 0.08:
+            if abs(diff_angle) < 0.04 or self.docking == True:
                 #on arrête
                 cmd_vel_msg = Twist()
                 cmd_vel_msg.linear.x = 0

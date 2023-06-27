@@ -34,13 +34,9 @@ def callback(msg):
     #print(intensity)
     pub_pc2.publish(pc2)
 
-def update_sight(msg):
-    global sight
-    sight = msg.data
 
 if __name__ == '__main__':
     rospy.init_node('transformer')
     pub_pc2 = rospy.Publisher('/lidar/points_docking', PointCloud2, queue_size=10)
     rospy.Subscriber('/scan', LaserScan, callback)
-    rospy.Subscriber('/sight',Float32,update_sight)
     rospy.spin()

@@ -81,9 +81,9 @@ def callback(msg):
 
     #print(str(tab_moy_intensities))
     #print(str(clusters))
-
-    indice_max = np.argmax(tab_moy_intensities)
-    group_max = clusters[indice_max]
+    if np.any(tab_moy_intensities) :
+        indice_max = np.argmax(tab_moy_intensities)
+        group_max = clusters[indice_max]
 
     P_panneau = []
     C_panneau = []

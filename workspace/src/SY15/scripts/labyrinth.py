@@ -9,7 +9,7 @@ from std_msgs.msg import Bool,Float32
 from random import shuffle
 import math
 
-FINISH_POINT = np.array([0.0,0.0])
+FINISH_POINT = np.array([0.5,0.3])
 
 # Enum of directions
 Direction = Enum('Direction',['UP','RIGHT','DOWN','LEFT'])
@@ -156,7 +156,8 @@ class Labyrinth_Solver:
             return
 
         if self.state == State.FINISHED :
-            self.state = MOVING_TO_FINISH
+            print("Moving to finish point")
+            self.state = State.MOVING_TO_FINISH
             target = Pose(Point(FINISH_POINT[0],FINISH_POINT[1],0),Quaternion())
             self.target_publisher.publish(target)
             return
@@ -285,7 +286,8 @@ class Labyrinth_Solver:
                         self.current_tile.create_child(direction)
             
             # Check if the robot is out of the labyrinth
-            if self.current_tile.walls == [None,None,None,None] and not is_defined and self.number_of_moves > 1 :
+            if self.current_tile.walls == [False,False,False,False] and not is_defined and self.number_of_moves >= 1 :
+                print("Set state to finished")
                 self.state = State.FINISHED
                 return
             

@@ -18,16 +18,19 @@ class VectorPanneau:
         self.publisher_target_check = rospy.Subscriber("/panneau_check",Bool,self.can_sen_coord)
         self.suscriber_position = rospy.Subscriber("/estimation", PoseWithCovarianceStamped, self.pose_callback)
         self.target_publisher = rospy.Publisher('/target',Pose,queue_size=10)
-        self.send_coord = True
+        self.target_angular_publisher = rospy.Publisher('/target_angular',Pose,queue_size=10)
+        self.send_coord = False
         self.vectors = []
         self.x = []
         self.y = []
-        self.robot_coord = np.array([0,0])
+        self.robot_coord = np.array([0.0,0.0])
+        self.robot_orientation = 0
         
 
     def pose_callback(self, pose : PoseWithCovarianceStamped):
         self.robot_coord[0] = pose.pose.pose.position.x
         self.robot_coord[1] = pose.pose.pose.position.y
+        self.robot_orientation = 2 * math.atan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w)
 
     def can_sen_coord(self, check:Bool):
         self.send_coord = True
@@ -49,8 +52,8 @@ class VectorPanneau:
             #calcul centre de gravité
             center = np.array([np.mean(self.x),np.mean(self.y)])
             print("Le centre de gravité est : "+str(center))
-            vector_1 = 0.22*np.array([np.mean(vx),np.mean(vy)])
-            vector_2 = -0.22*np.array([np.mean(vx),np.mean(vy)])
+            vector_1 = 0.20*np.array([np.mean(vx),np.mean(vy)])
+            vector_2 = -0.20*np.array([np.mean(vx),np.mean(vy)])
             vector_1 += center
             vector_2 += center
             print("Le nouveau point 1 est : "+str(vector_1))
@@ -59,10 +62,21 @@ class VectorPanneau:
             dist_2 = np.sqrt(vector_2[0]**2+vector_2[1]**2)
             if dist_1 < dist_2 : 
                 vector = vector_1
+                vector_angular = vector_2
             else : 
                 vector = vector_2
-            #publier
+                #on prend l'autre vecteur pour le reglage de l'angle
+                vector_angular = vector_1
+            #PARTIE VECTEUR D'ANGLE
+            vector_angular = np.dot(np.array([[np.cos(self.robot_orientation),-np.sin(self.robot_orientation)],[np.sin(self.robot_orientation),np.cos(self.robot_orientation)]]),vector_angular)
+            vector_angular += self.robot_coord
+            self.target_angular_publisher.publish(Pose(Point(vector_angular[0],vector_angular[1],0),Quaternion()))
+            #PARTIE VECTEUR DE POSITION
+            print(f"position du robot : {self.robot_coord}")
             print("Le nouveau point repere robot est : "+str(vector))
+
+            vector = np.dot(np.array([[np.cos(self.robot_orientation),-np.sin(self.robot_orientation)],[np.sin(self.robot_orientation),np.cos(self.robot_orientation)]]),vector)
+            print("Le nouveau point apres orientation est : "+str(vector))
             vector += self.robot_coord
             print("Le nouveau point repere global est : "+str(vector))
             
@@ -86,15 +100,12 @@ class VectorPanneau:
         if standardized_data != []:
             covariance_matrix = np.cov(standardized_data, ddof = 0, rowvar = False)
             eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)
-
-            index = np.argmin(eigenvalues)
+            index = np.argmax(eigenvalues) #ATTTEEENNNNTTIIOONNN
             vector = eigenvectors[index]
             self.vectors.append(vector)
         
         self.send_coord_move()
 
-        
-        
 
 
     def run(self):
