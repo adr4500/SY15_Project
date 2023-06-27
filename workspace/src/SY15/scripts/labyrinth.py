@@ -328,13 +328,13 @@ class Labyrinth_Solver:
                 
                 pos = np.array([self.robot_pos.pose.position.x,self.robot_pos.pose.position.y])
                 if direction == Direction.UP :
-                    target_coord = pos + np.array([distance,0])
+                    target_coord = np.array([pos[0],self.current_tile.get_parent_edge()[1]]) + np.array([distance,0])
                 elif direction == Direction.RIGHT :
-                    target_coord = pos + np.array([0,-distance])
+                    target_coord = np.array([self.current_tile.get_parent_edge()[0],pos[1]]) + np.array([0,-distance])
                 elif direction == Direction.DOWN :
-                    target_coord = pos + np.array([-distance,0])
+                    target_coord = np.array([pos[0],self.current_tile.get_parent_edge()[1]]) + np.array([-distance,0])
                 elif direction == Direction.LEFT :
-                    target_coord = pos + np.array([0,distance])
+                    target_coord = np.array([self.current_tile.get_parent_edge()[0],pos[1]]) + np.array([0,distance])
                 target = Pose(Point(target_coord[0],target_coord[1],0),Quaternion())
                 self.target_publisher.publish(target)
                 self.state = State.MOVING_TO_CENTER
